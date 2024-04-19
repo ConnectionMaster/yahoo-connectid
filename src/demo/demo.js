@@ -3,91 +3,144 @@
 import $ from 'jquery';
 import connectid from '../connectid';
 
-const LOCALSTORAGE_KEY = 'yahoo-connectid';
-const LOCALSTORAGE_KEY_DEMO = 'yahoo-connectid-demo';
+const LOCALSTORAGE_KEY = 'connectId';
+const LOCALSTORAGE_KEY_DEMO = 'connectId-demo';
 
-let localStorageDataJson = '';
+// eslint-disable-next-line
+const GDPR_CONSENT_ALLOWED = 'CPdBusAPdBusAAOACBENCYCoAP_AAH_AACiQIlNd_X__bX9n-_7_6ft0cY1f9_r3ruQzDhfFs-8F3L_W_LwX32E7NF36pq4KmR4ku1bBIQFtHMnUDUmxaolVrzHsak2cpyNKI7JkknsZe2dYGF9Pn9lD-YKZ7_5_9_f52T_9_9_-39z3_9f___dt_-__-vjfV599n_v9fV_789Kf9____-_-___4IQQ_AJMNW4gC7EscCbQMIoQQIwrCQqAUAEFAMLRBYAODgp2VgEusIWACAVARgRAgxBRgwCAAACAJCIAJACwQCIAiAQAAgARAIQAETAILACwMAgABANCxACgAECQgyICI5TAgIgSCglsrEEoK9DTCAOssAKBRGxUACJAABSAgJCwcAwBICXCyQJMULwAw0AGAAIIlCIAMAAQRKFQAYAAgiUA';
+const GDPR_CONSENT_NOTALLOWED = 'CPdIUkAPdIUkAAOACCENCaCgAAAAAAAAACiQAAAAAABhoAMAAQRKEQAYAAgiUKgAwABBEoA';
+
+const setPrivacyPreferences = (local, usp, gdpr, gpp) => {
+  window.localStorage.removeItem('connectIdOptOut');
+  delete window.__tcfapi;
+  delete window.__uspapi;
+  delete window.__gpp;
+
+  if (local !== 'unavailable') {
+    window.localStorage.setItem('connectIdOptOut', local === 'allowed' ? '0' : '1');
+  }
+
+  if (usp !== 'unavailable') {
+    let uspString;
+    if (usp === 'does_not_apply') {
+      uspString = '1---';
+    } else {
+      uspString = usp === 'allowed' ? '1YNN' : '1YYN';
+    }
+    window.__uspapi = (command, version, callback) => {
+      callback({uspString}, true);
+    };
+  }
+
+  if (gdpr !== 'unavailable') {
+    const gdprApplies = gdpr !== 'does_not_apply';
+
+    window.__tcfapi = (command, version, callback) => {
+      const response = {
+        eventStatus: 'tcloaded',
+        gdprApplies,
+      };
+      if (gdprApplies) {
+        let tcString;
+        if (gdprApplies) {
+          tcString = gdpr === 'allowed' ? GDPR_CONSENT_ALLOWED : GDPR_CONSENT_NOTALLOWED;
+        }
+        const purpose1 = !gdprApplies ? undefined : gdpr === 'allowed';
+
+        response.tcString = tcString;
+        response.purpose = {
+          consents: {
+            1: purpose1,
+          },
+        };
+      }
+      callback(response, true);
+    };
+  }
+
+  if (gpp !== 'unavailable') {
+    window.__gpp = (command, callback) => {
+      const response = {
+        pingData: {
+          cmpStatus: 'loaded',
+          signalStatus: 'ready',
+          applicableSections: ['-1'],
+          gppString: 'DBAA',
+        },
+      };
+      callback(response, true);
+    };
+  }
+};
 
 const renderLocalStorageData = () => {
-
   const json = window.localStorage.getItem(LOCALSTORAGE_KEY);
-
-  if (json === localStorageDataJson) {
-    return;
-  }
-  localStorageDataJson = json;
-
-  const data = JSON.parse(json);
-
-  const header = data
-    ? `<tr>
-    <th>Hashed Email</th>
-    <th>connectid</th>
-    <th>Last Updated</th>
-  </tr>`
-    : 'no stored data';
-
-  const rows = data
-    ? Object.keys(data).map((key) => {
-      const value = data[key];
-
-      if (!value.connectid) {
-        return null;
-      }
-
-      return `<tr>
-      <td>${key}</td>
-      <td>${value.connectid.value}</td>
-      <td>${value.connectid.lastUpdated}</td>
-    </tr>`;
-    }).join('')
-    : '';
-
-  // display results
-  $('#localStorageData tbody').html(header + rows);
+  const data = JSON.stringify(JSON.parse(json), null, 2);
+  $('#localStorageData pre').text(data);
 };
 
 const callGetIds = () => {
   const demoState = JSON.parse(window.localStorage.getItem(LOCALSTORAGE_KEY_DEMO) || '{}');
   document.getElementById('pixelId').value = demoState.pixelId || '';
   document.getElementById('email').value = demoState.email || '';
-  document.getElementById('gdpr').value = demoState.gdpr || '0';
-  document.getElementById('gdprConsent').value = demoState.gdprConsent || '';
-  document.getElementById('usPrivacy').value = demoState.usPrivacy || '';
+  document.getElementById('puid').value = demoState.puid || '';
+  document.getElementById('privacy_local').value = demoState.privacyLocal || 'unavailable';
+  document.getElementById('privacy_usp').value = demoState.privacyUsp || 'does_not_apply';
+  document.getElementById('privacy_gdpr').value = demoState.privacyGdpr || 'does_not_apply';
+  document.getElementById('privacy_gpp').value = demoState.privacyGpp || 'does_not_apply';
 
+  setPrivacyPreferences(demoState.privacyLocal, demoState.privacyUsp, demoState.privacyGdpr, demoState.privacyGpp);
   // get ids from yahoo-connectid module
   connectid.getIds(
     demoState,
     ids => {
-      // display results
-      document.getElementById('getIdsResponse').innerHTML = `// ${JSON.stringify(ids)}`;
-    });
+      $('#getIdsResponse pre').text(`${JSON.stringify(ids, null, 2)}`);
+    },
+  );
 };
 
 (() => {
-  document.getElementById('emailButton').onclick = evt => {
+  document.getElementById('execute').onclick = () => {
     const pixelId = document.getElementById('pixelId').value;
     const email = document.getElementById('email').value;
-    const gdpr = document.getElementById('gdpr').value;
-    const gdprConsent = document.getElementById('gdprConsent').value;
-    const usPrivacy = document.getElementById('usPrivacy').value;
+    const puid = document.getElementById('puid').value;
+    const privacyLocal = document.getElementById('privacy_local').value || 'unavailable';
+    const privacyUsp = document.getElementById('privacy_usp').value || 'does_not_apply';
+    const privacyGdpr = document.getElementById('privacy_gdpr').value || 'does_not_apply';
+    const privacyGpp = document.getElementById('privacy_gpp').value || 'does_not_apply';
     window.localStorage.setItem(LOCALSTORAGE_KEY_DEMO, JSON.stringify({
       pixelId,
       email,
-      gdpr,
-      gdprConsent,
-      usPrivacy
+      puid,
+      privacyLocal,
+      privacyUsp,
+      privacyGdpr,
+      privacyGpp,
     }));
 
     callGetIds();
   };
 
-  document.getElementById('reset').onclick = evt => {
-    window.localStorage.clear();
-    window.localStorage.removeItem(LOCALSTORAGE_KEY_DEMO);
+  document.getElementById('reset').onclick = () => {
+    window.localStorage.removeItem(LOCALSTORAGE_KEY);
+    document.cookie = `${LOCALSTORAGE_KEY}=;Max-Age=0;Domain=.test.com;path=/;Secure;SameSite=None`;
+
+    const pixelId = document.getElementById('pixelId').value;
+    const privacyLocal = document.getElementById('privacy_local').value || 'unavailable';
+    const privacyUsp = document.getElementById('privacy_usp').value || 'does_not_apply';
+    const privacyGdpr = document.getElementById('privacy_gdpr').value || 'does_not_apply';
+    const privacyGpp = document.getElementById('privacy_gpp').value || 'does_not_apply';
+    window.localStorage.setItem(LOCALSTORAGE_KEY_DEMO, JSON.stringify({
+      pixelId,
+      privacyLocal,
+      privacyUsp,
+      privacyGdpr,
+      privacyGpp,
+    }));
+
     callGetIds();
   };
 
-  setInterval(renderLocalStorageData, 250);
+  setInterval(renderLocalStorageData, 500);
   callGetIds();
 })();

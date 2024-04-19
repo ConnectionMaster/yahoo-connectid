@@ -1,87 +1,92 @@
 /* Copyright Yahoo, Licensed under the terms of the Apache 2.0 license. See LICENSE file in project root for terms. */
 
-const LOCALSTORAGE_KEY = 'yahoo-connectid';
+const STORAGE_KEY = 'connectId';
 
-/**
- * Read state from Local Storage
- *
- * @returns {Object}
- */
-const getState = () => {
-  let state = {};
+const getCookie = (storageKey = STORAGE_KEY) => {
+  const name = `${storageKey}=`;
+  const ca = document.cookie.split(';');
+  for (let i = 0; i < ca.length; i++) {
+    const c = (ca[i] || '').trim();
+    if (c.indexOf(name) === 0) {
+      return c.substring(name.length, c.length);
+    }
+  }
+  return '';
+};
+
+const setCookie = (value) => {
+  const maxAge = 365 * 24 * 60 * 60;
+  let domain;
   try {
-    state = JSON.parse(localStorage.getItem(LOCALSTORAGE_KEY)) || {};
+    domain = window.location.hostname.match(/[\w-]+\.([\w]+|co.uk)$/)[0];
   } catch (e) {
+    // ignore
+  }
+  document.cookie = `${STORAGE_KEY}=${value};Max-Age=${maxAge};Domain=${domain};path=/;Secure;SameSite=None`;
+};
+
+const clearCookie = () => {
+  document.cookie = `${STORAGE_KEY}=;Max-Age=0;path=/;Secure;SameSite=None`;
+};
+
+const getLocalStorage = () => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) || '';
+  } catch (e) {
+    return {};
+  }
+};
+
+const setLocalStorage = json => {
+  try {
+    localStorage.setItem(STORAGE_KEY, json);
+  } catch (e) {
+    // ignore
+  }
+};
+
+const clearLocalStorage = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    // ignore
+  }
+};
+
+const getLocalData = () => {
+  let json = getCookie();
+  if (!json) {
+    json = getLocalStorage();
+    if (json) {
+      setCookie(json);
+    }
   }
 
-  return state;
-};
-
-/**
- * Write state to Local Storage
- *
- * @param {Object} state
- */
-const setState = state => {
   try {
-    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(state));
+    return JSON.parse(json) || {};
   } catch (e) {
+    return {};
   }
 };
 
-/**
- * Read state for a specified user based on their hashed email
- *
- * @param {string} hashedEmail
- * @returns {{connectid: *}}
- */
-const getUserState = hashedEmail => {
-  return {
-    ...getState()[hashedEmail] || {}
-  };
+const setLocalData = (data = {}) => {
+  try {
+    const json = JSON.stringify(data);
+    setCookie(json);
+    setLocalStorage(json);
+  } catch (e) {
+    // ignore
+  }
 };
 
-/**
- * Write state for a specified user based on their hashed email
- *
- * @param {string} hashedEmail
- * @param {Object} userState
- */
-const setUserState = (hashedEmail, userState) => {
-  const state = {
-    ...getState(),
-    [hashedEmail]: userState,
-  };
-
-  setState(state);
-};
-
-/**
- * Provides most recently provided hashed email
- *
- * @returns {?string}
- */
-const getMostRecentHashedEmail = () => {
-  return getState().mostRecentHashedEmail;
-};
-
-/**
- * Stores most recently provided hashed email
- *
- * @param {string} hashedEmail
- */
-const setMostRecentHashedEmail = hashedEmail => {
-  const state = {
-    ...getState(),
-    mostRecentHashedEmail: hashedEmail,
-  };
-
-  setState(state);
+const clearLocalData = () => {
+  clearCookie();
+  clearLocalStorage();
 };
 
 export default {
-  getUserState,
-  setUserState,
-  getMostRecentHashedEmail,
-  setMostRecentHashedEmail,
+  getCookie,
+  getLocalData,
+  setLocalData,
+  clearLocalData,
 };
